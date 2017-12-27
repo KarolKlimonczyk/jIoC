@@ -6,7 +6,7 @@ import org.junit.Test;
 
 public class IoCTest {
 
-    JiocContext jIocContext;
+    private JiocContext jIocContext;
 
     @Before
     public void init() {

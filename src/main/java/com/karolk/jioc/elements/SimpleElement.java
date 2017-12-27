@@ -7,19 +7,17 @@ import com.karolk.jioc.enums.ElementScope;
 @JiocElement(scope = ElementScope.PROTOTYPE)
 public class SimpleElement {
 
-    //temporarily fields are public (injection not implemented for private fields)
+    @JiocInject
+    private SimpleSingleton simpleSingleton;
 
     @JiocInject
-    public SimpleSingleton simpleSingleton;
+    private SimpleSingleton simpleSingleton2;
 
     @JiocInject
-    public SimpleSingleton simpleSingleton2;
+    private SimplePrototype simplePrototype;
 
     @JiocInject
-    public SimplePrototype simplePrototype;
-
-    @JiocInject
-    public SimplePrototype simplePrototype2;
+    private SimplePrototype simplePrototype2;
 
     public SimpleSingleton getSimpleSingleton() {
         return simpleSingleton;

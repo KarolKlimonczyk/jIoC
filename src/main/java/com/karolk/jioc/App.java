@@ -8,7 +8,7 @@ import com.karolk.jioc.elements.SimpleElement;
 public class App {
 
     @JiocInject
-    public SimpleElement simpleElement;
+    private SimpleElement simpleElement;
 
     public static void main(String[] args) {
     }

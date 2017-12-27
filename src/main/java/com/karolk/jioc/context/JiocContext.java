@@ -79,8 +79,9 @@ public class JiocContext {
     }
 
     private void resolveInjectionForInstanceFields(Object instance) {
-        for (Field field : instance.getClass().getFields()) {
+        for (Field field : instance.getClass().getDeclaredFields()) {
             if (field.isAnnotationPresent(JiocInject.class)) {
+                field.setAccessible(true);
                 this.resolveInjection(instance, field);
             }
         }
