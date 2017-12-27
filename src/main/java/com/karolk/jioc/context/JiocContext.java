@@ -1,15 +1,20 @@
 package com.karolk.jioc.context;
 
 import com.karolk.jioc.annotations.JiocElement;
+import com.karolk.jioc.annotations.JiocInject;
 import com.karolk.jioc.enums.ElementParam;
 import com.karolk.jioc.enums.ElementScope;
 import com.karolk.jioc.exceptions.AnnotationNotFoundException;
 import com.karolk.jioc.exceptions.AnnotationParamNotFoundException;
 import com.karolk.jioc.exceptions.NewInstanceConstructException;
 import org.reflections.Reflections;
+import org.reflections.scanners.FieldAnnotationsScanner;
+import org.reflections.scanners.SubTypesScanner;
+import org.reflections.scanners.TypeAnnotationsScanner;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -33,7 +38,7 @@ public class JiocContext {
     }
 
     private void init() {
-        Reflections reflections = new Reflections(this.context);
+        Reflections reflections = new Reflections(this.context, new SubTypesScanner(), new FieldAnnotationsScanner(), new TypeAnnotationsScanner());
         Set<Class<?>> elements = reflections.getTypesAnnotatedWith(JiocElement.class);
         elements.forEach(this::resolve);
     }
@@ -45,7 +50,9 @@ public class JiocContext {
         }
 
         if (this.isInstanceAlreadyExist(classType) && this.isSingletonInstance(classType)) {
-            return this.instances.get(classType);
+            Object instance = this.instances.get(classType);
+            this.resolveInjectionForInstanceFields(instance);
+            return instance;
         }
 
         Constructor<?>[] constructors = classType.getConstructors();
@@ -61,6 +68,7 @@ public class JiocContext {
 
         try {
             Object instance = primaryConstructor.newInstance(constructorParams);
+            this.resolveInjectionForInstanceFields(instance);
             this.instances.put(classType, instance);
             return instance;
 
@@ -68,6 +76,34 @@ public class JiocContext {
             e.printStackTrace();
             throw new NewInstanceConstructException("Cannot create new instance");
         }
+    }
+
+    private void resolveInjectionForInstanceFields(Object instance) {
+        for (Field field : instance.getClass().getFields()) {
+            if (field.isAnnotationPresent(JiocInject.class)) {
+                this.resolveInjection(instance, field);
+            }
+        }
+    }
+
+    private Field resolveInjection(Object instance, Field field) {
+
+        if (this.isInstanceAlreadyExist(field.getType()) && this.isSingletonInstance(field.getType())) {
+            try {
+                field.set(instance, this.instances.get(field.getType()));
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+            return field;
+        }
+
+        Object objectToInject = this.resolve(field.getType());
+        try {
+            field.set(instance, objectToInject);
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+        return field;
     }
 
     private boolean isAnnotated(Class<?> classType) {
