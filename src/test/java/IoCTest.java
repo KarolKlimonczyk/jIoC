@@ -1,5 +1,8 @@
 import com.karolk.jioc.context.JiocContext;
 import com.karolk.jioc.elements.SimpleElement;
+import com.karolk.jioc.elements.SimpleElementCustomConstructor;
+import com.karolk.jioc.elements.SimplePrototype;
+import com.karolk.jioc.elements.SimpleSingleton;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -14,26 +17,47 @@ public class IoCTest {
     }
 
     @Test
-    public void shouldReturnDifferentHashCode() {
+    public void shouldReturnDifferentObjects() {
         //given
         SimpleElement simpleElement = jIocContext.getElement(SimpleElement.class);
         //when
-        int hashCode1 = simpleElement.getSimplePrototype().hashCode();
-        int hashCode2 = simpleElement.getSimplePrototype2().hashCode();
+        SimplePrototype simplePrototype1 = simpleElement.getSimplePrototype();
+        SimplePrototype simplePrototype2 = simpleElement.getSimplePrototype2();
 
         //then
-        Assert.assertNotEquals(hashCode1, hashCode2);
+        Assert.assertNotEquals(simplePrototype1, simplePrototype2);
     }
 
     @Test
-    public void shouldReturnTheSameHashCode() {
+    public void shouldReturnTheSameObjects() {
         //given
         SimpleElement simpleElement = jIocContext.getElement(SimpleElement.class);
         //when
-        int hashCode1 = simpleElement.getSimpleSingleton().hashCode();
-        int hashCode2 = simpleElement.getSimpleSingleton2().hashCode();
+        SimpleSingleton simpleSingleton1 = simpleElement.getSimpleSingleton();
+        SimpleSingleton simpleSingleton2 = simpleElement.getSimpleSingleton2();
 
         //then
-        Assert.assertEquals(hashCode1, hashCode2);
+        Assert.assertEquals(simpleSingleton1, simpleSingleton2);
+    }
+
+    @Test
+    public void shouldInjectObjectsByConstructor() {
+        //given
+        SimpleElement simpleElement = jIocContext.getElement(SimpleElement.class);
+        SimpleElementCustomConstructor simpleElementCustomConstructor = simpleElement.getSimpleElementCustomConstructor();
+
+        //when
+        SimplePrototype simplePrototype1 = simpleElementCustomConstructor.getSimplePrototype();
+        SimplePrototype simplePrototype2 = simpleElementCustomConstructor.getSimplePrototype2();
+        SimpleSingleton simpleSingleton = simpleElementCustomConstructor.getSimpleSingleton();
+        SimpleSingleton simpleSingleton2 = simpleElementCustomConstructor.getSimpleSingleton2();
+
+        //then
+        Assert.assertNotNull(simplePrototype1);
+        Assert.assertNotNull(simplePrototype2);
+        Assert.assertNotNull(simpleSingleton);
+
+        Assert.assertNotEquals(simplePrototype1, simplePrototype2);
+        Assert.assertEquals(simpleSingleton, simpleSingleton2);
     }
 }

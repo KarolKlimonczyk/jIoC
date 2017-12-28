@@ -4,9 +4,7 @@ import com.karolk.jioc.annotations.JiocElement;
 import com.karolk.jioc.annotations.JiocInject;
 import com.karolk.jioc.enums.ElementParam;
 import com.karolk.jioc.enums.ElementScope;
-import com.karolk.jioc.exceptions.AnnotationNotFoundException;
-import com.karolk.jioc.exceptions.AnnotationParamNotFoundException;
-import com.karolk.jioc.exceptions.NewInstanceConstructException;
+import com.karolk.jioc.exceptions.*;
 import org.reflections.Reflections;
 import org.reflections.scanners.FieldAnnotationsScanner;
 import org.reflections.scanners.SubTypesScanner;
@@ -16,10 +14,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class JiocContext {
 
@@ -46,7 +41,7 @@ public class JiocContext {
     private Object resolve(Class<?> classType) {
 
         if (!this.isAnnotated(classType)) {
-            throw new AnnotationNotFoundException("Element is not annotated by any jIoC annotation.");
+            throw new AnnotationNotFoundException("Element is not annotated by any jIoC annotation");
         }
 
         if (this.isInstanceAlreadyExist(classType) && this.isSingletonInstance(classType)) {
@@ -55,19 +50,17 @@ public class JiocContext {
             return instance;
         }
 
-        Constructor<?>[] constructors = classType.getConstructors();
+        Constructor constructor = this.getSuitableConstructor(classType);
 
-        //temporary solution
-        if (constructors.length < 1) {
-            throw new IllegalStateException("Constructor not found");
+        if(constructor == null) {
+            throw new SuitableConstructorNotFound("No annotated by @JiocInject or default constructor found in " +classType);
         }
 
-        Constructor<?> primaryConstructor = constructors[0];
-        Class<?>[] constructorParamsTypes = primaryConstructor.getParameterTypes();
+        Class<?>[] constructorParamsTypes = constructor.getParameterTypes();
         Object[] constructorParams = Arrays.stream(constructorParamsTypes).map(this::resolve).toArray();
 
         try {
-            Object instance = primaryConstructor.newInstance(constructorParams);
+            Object instance = constructor.newInstance(constructorParams);
             this.resolveInjectionForInstanceFields(instance);
             this.instances.put(classType, instance);
             return instance;
@@ -123,6 +116,45 @@ public class JiocContext {
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
             e.printStackTrace();
             throw new AnnotationParamNotFoundException("Annotation param: " + ElementParam.SCOPE + " not found.");
+        }
+    }
+
+    private Constructor getSuitableConstructor(Class<?> classType) {
+        Constructor<?>[] constructors = classType.getDeclaredConstructors();
+        Constructor annotatedConstructor = null;
+        Constructor defaultConstructor = null;
+
+        int amountOfConstructorsMarkedByInjectAnnotation = 0;
+
+        for(Constructor constructor: constructors) {
+
+            if(constructor.getParameterCount() == 0) {
+                defaultConstructor = constructor;
+            }
+
+            if(constructor.isAnnotationPresent(JiocInject.class)) {
+                amountOfConstructorsMarkedByInjectAnnotation++;
+                if(amountOfConstructorsMarkedByInjectAnnotation > 1) {
+                    throw new InvalidConstructorAnnotation("Too many constructors marked with @JiocInject annotation in " + classType);
+                }
+
+                this.validateIfAllConstructorFieldsAreInjectable(constructor);
+                annotatedConstructor = constructor;
+            }
+        }
+
+        if(annotatedConstructor == null) {
+            return defaultConstructor;
+        }
+
+        return annotatedConstructor;
+    }
+
+    private void validateIfAllConstructorFieldsAreInjectable(Constructor constructor) {
+        for(Class<?> classType : constructor.getParameterTypes()) {
+            if(!classType.isAnnotationPresent(JiocElement.class)) {
+                throw new InvalidConstructorAnnotation("Some of the constructor's parameters are not annotated by @JiocElement and cannot be injected in " + classType);
+            }
         }
     }
 }

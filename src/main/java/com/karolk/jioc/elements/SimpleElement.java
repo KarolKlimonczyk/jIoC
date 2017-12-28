@@ -19,6 +19,9 @@ public class SimpleElement {
     @JiocInject
     private SimplePrototype simplePrototype2;
 
+    @JiocInject
+    private SimpleElementCustomConstructor simpleElementCustomConstructor;
+
     public SimpleSingleton getSimpleSingleton() {
         return simpleSingleton;
     }
@@ -33,5 +36,9 @@ public class SimpleElement {
 
     public SimplePrototype getSimplePrototype2() {
         return simplePrototype2;
+    }
+
+    public SimpleElementCustomConstructor getSimpleElementCustomConstructor() {
+        return simpleElementCustomConstructor;
     }
 }
