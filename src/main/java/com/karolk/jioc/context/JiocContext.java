@@ -4,6 +4,7 @@ import com.karolk.jioc.annotations.JiocElement;
 import com.karolk.jioc.annotations.JiocInject;
 import com.karolk.jioc.enums.ElementParam;
 import com.karolk.jioc.enums.ElementScope;
+import com.karolk.jioc.enums.InjectionParam;
 import com.karolk.jioc.exceptions.*;
 import org.reflections.Reflections;
 import org.reflections.scanners.FieldAnnotationsScanner;
@@ -14,6 +15,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.ParameterizedType;
 import java.util.*;
 
 public class JiocContext {
@@ -52,8 +54,8 @@ public class JiocContext {
 
         Constructor constructor = this.getSuitableConstructor(classType);
 
-        if(constructor == null) {
-            throw new SuitableConstructorNotFound("No annotated by @JiocInject or default constructor found in " +classType);
+        if (constructor == null) {
+            throw new SuitableConstructorNotFound("No annotated by @JiocInject or default constructor found in " + classType);
         }
 
         Class<?>[] constructorParamsTypes = constructor.getParameterTypes();
@@ -81,23 +83,73 @@ public class JiocContext {
     }
 
     private Field resolveInjection(Object instance, Field field) {
-
-        if (this.isInstanceAlreadyExist(field.getType()) && this.isSingletonInstance(field.getType())) {
-            try {
-                field.set(instance, this.instances.get(field.getType()));
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-            }
-            return field;
-        }
-
-        Object objectToInject = this.resolve(field.getType());
+        Class<?> fieldType = getFieldType(field);
         try {
+            Object objectToInject = this.getObjectToInject(field, fieldType);
             field.set(instance, objectToInject);
         } catch (IllegalAccessException e) {
             e.printStackTrace();
         }
         return field;
+    }
+
+    private Class<?> getFieldType(Field field) {
+        if (!isCollection(field)) {
+            return field.getType();
+        }
+
+        Class<?> genericType;
+        ParameterizedType genericCollectionType = (ParameterizedType) field.getGenericType();
+        genericType = (Class<?>) genericCollectionType.getActualTypeArguments()[0];
+        return genericType;
+    }
+
+    private Object getObjectToInject(Field field, Class<?> genericFieldType) {
+
+        if (isCollection(field)) {
+            return this.getCollectionToInject(genericFieldType, field);
+        }
+
+        if (this.isInstanceAlreadyExist(field.getType()) && this.isSingletonInstance(field.getType())) {
+            return this.instances.get(field.getType());
+        }
+
+        return this.resolve(field.getType());
+    }
+
+    private Object getCollectionToInject(Class<?> genericFieldType, Field field) {
+        int collectionSize = this.getCollectionSize(field);
+        Collection<Object> collection;
+
+        if (field.getType().equals(List.class)) {
+            collection = new ArrayList<>();
+        } else {
+            collection = new HashSet<>();
+        }
+
+        for (int i = 0; i < collectionSize; i++) {
+            if (this.isInstanceAlreadyExist(genericFieldType) && this.isSingletonInstance(genericFieldType)) {
+                collection.add(this.instances.get(genericFieldType));
+            } else {
+                collection.add(this.resolve(genericFieldType));
+            }
+        }
+        return collection;
+    }
+
+    private int getCollectionSize(Field field) {
+        int collectionSize = 0;
+        Annotation annotation = field.getAnnotation(JiocInject.class);
+        try {
+            collectionSize = (int) annotation.annotationType().getMethod(InjectionParam.COLLECTION_SIZE).invoke(annotation);
+        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+            e.printStackTrace();
+        }
+        return collectionSize;
+    }
+
+    private boolean isCollection(Field field) {
+        return field.getType().equals(List.class) || field.getType().equals(Set.class);
     }
 
     private boolean isAnnotated(Class<?> classType) {
@@ -126,15 +178,15 @@ public class JiocContext {
 
         int amountOfConstructorsMarkedByInjectAnnotation = 0;
 
-        for(Constructor constructor: constructors) {
+        for (Constructor constructor : constructors) {
 
-            if(constructor.getParameterCount() == 0) {
+            if (constructor.getParameterCount() == 0) {
                 defaultConstructor = constructor;
             }
 
-            if(constructor.isAnnotationPresent(JiocInject.class)) {
+            if (constructor.isAnnotationPresent(JiocInject.class)) {
                 amountOfConstructorsMarkedByInjectAnnotation++;
-                if(amountOfConstructorsMarkedByInjectAnnotation > 1) {
+                if (amountOfConstructorsMarkedByInjectAnnotation > 1) {
                     throw new InvalidConstructorAnnotation("Too many constructors marked with @JiocInject annotation in " + classType);
                 }
 
@@ -143,7 +195,7 @@ public class JiocContext {
             }
         }
 
-        if(annotatedConstructor == null) {
+        if (annotatedConstructor == null) {
             return defaultConstructor;
         }
 
@@ -151,8 +203,8 @@ public class JiocContext {
     }
 
     private void validateIfAllConstructorFieldsAreInjectable(Constructor constructor) {
-        for(Class<?> classType : constructor.getParameterTypes()) {
-            if(!classType.isAnnotationPresent(JiocElement.class)) {
+        for (Class<?> classType : constructor.getParameterTypes()) {
+            if (!classType.isAnnotationPresent(JiocElement.class)) {
                 throw new InvalidConstructorAnnotation("Some of the constructor's parameters are not annotated by @JiocElement and cannot be injected in " + classType);
             }
         }

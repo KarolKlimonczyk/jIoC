@@ -7,6 +7,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.List;
+import java.util.Set;
+
 public class IoCTest {
 
     private JiocContext jIocContext;
@@ -59,5 +62,68 @@ public class IoCTest {
 
         Assert.assertNotEquals(simplePrototype1, simplePrototype2);
         Assert.assertEquals(simpleSingleton, simpleSingleton2);
+    }
+
+    @Test
+    public void shouldInjectCollections() {
+        //given
+        SimpleElement simpleElement = jIocContext.getElement(SimpleElement.class);
+
+        //when
+        List<SimpleSingleton> simpleSingletonList = simpleElement.getSimpleSingletonList();
+        List<SimplePrototype> simplePrototypeList = simpleElement.getSimplePrototypeList();
+        Set<SimpleSingleton> simpleSingletonSet = simpleElement.getSimpleSingletonSet();
+        Set<SimplePrototype> simplePrototypeSet = simpleElement.getSimplePrototypeSet();
+
+        //then
+        Assert.assertNotNull(simpleSingletonList);
+        Assert.assertNotNull(simplePrototypeList);
+        Assert.assertNotNull(simpleSingletonSet);
+        Assert.assertNotNull(simplePrototypeSet);
+
+        Assert.assertEquals(3, simpleSingletonList.size());
+        Assert.assertEquals(3, simplePrototypeList.size());
+        Assert.assertEquals(1, simpleSingletonSet.size());
+        Assert.assertEquals(5, simplePrototypeSet.size());
+    }
+
+    @Test
+    public void shouldReturnSetWithOneElement() {
+        //given
+        SimpleElement simpleElement = jIocContext.getElement(SimpleElement.class);
+
+        //when
+        Set<SimpleSingleton> simpleSingletonSet = simpleElement.getSimpleSingletonSet();
+
+        //then
+        Assert.assertEquals(1, simpleSingletonSet.size());
+    }
+
+    @Test
+    public void shouldReturnListOfSingletons() {
+        //given
+        SimpleElement simpleElement = jIocContext.getElement(SimpleElement.class);
+
+        //when
+        List<SimpleSingleton> simpleSingletonList = simpleElement.getSimpleSingletonList();
+
+        //then
+        Assert.assertEquals(simpleSingletonList.get(0), simpleSingletonList.get(1));
+        Assert.assertEquals(simpleSingletonList.get(0), simpleSingletonList.get(2));
+        Assert.assertEquals(simpleSingletonList.get(1), simpleSingletonList.get(2));
+    }
+
+    @Test
+    public void shouldReturnListOfPrototypes() {
+        //given
+        SimpleElement simpleElement = jIocContext.getElement(SimpleElement.class);
+
+        //when
+        List<SimplePrototype> simplePrototypeList = simpleElement.getSimplePrototypeList();
+
+        //then
+        Assert.assertNotEquals(simplePrototypeList.get(0), simplePrototypeList.get(1));
+        Assert.assertNotEquals(simplePrototypeList.get(0), simplePrototypeList.get(2));
+        Assert.assertNotEquals(simplePrototypeList.get(1), simplePrototypeList.get(2));
     }
 }
