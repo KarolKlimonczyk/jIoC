@@ -1,8 +1,8 @@
 import com.karolk.jioc.context.JiocContext;
-import com.karolk.jioc.elements.SimpleElement;
-import com.karolk.jioc.elements.SimpleElementCustomConstructor;
-import com.karolk.jioc.elements.SimplePrototype;
-import com.karolk.jioc.elements.SimpleSingleton;
+import com.karolk.jioc.exceptions.AnnotationNotFoundException;
+import com.karolk.jioc.exceptions.InvalidConstructorAnnotationException;
+import com.karolk.jioc.exceptions.NewInstanceConstructException;
+import data.*;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -126,4 +126,41 @@ public class IoCTest {
         Assert.assertNotEquals(simplePrototypeList.get(0), simplePrototypeList.get(2));
         Assert.assertNotEquals(simplePrototypeList.get(1), simplePrototypeList.get(2));
     }
+
+    @Test
+    public void shouldReturnPrototypeFromConditionalScope() {
+        //given
+        SimpleConditionalScope simpleConditionalScope = jIocContext.getElement(SimpleConditionalScope.class);
+
+        //then
+        Assert.assertEquals(simpleConditionalScope.getSimpleSingleton1(), simpleConditionalScope.getSimpleSingleton2());
+        Assert.assertNotEquals(simpleConditionalScope.getSimpleSingleton1(), simpleConditionalScope.getConditionalElement1());
+        Assert.assertNotEquals(simpleConditionalScope.getSimpleSingleton1(), simpleConditionalScope.getConditionalElement1());
+        Assert.assertNotEquals(simpleConditionalScope.getConditionalElement1(), simpleConditionalScope.getConditionalElement2());
+    }
+
+    @Test(expected = InvalidConstructorAnnotationException.class)
+    public void shouldThrowInvalidConstructorAnnotationException() {
+        //when
+        jIocContext.getElement(TooManyConstructorsElement.class);
+    }
+
+    @Test(expected = NewInstanceConstructException.class)
+    public void shouldThrowNewInstanceConstructException() {
+        //when
+        jIocContext.getElement(NoSuitableConstructorElement.class);
+    }
+
+    @Test(expected = InvalidConstructorAnnotationException.class)
+    public void shouldThrowInvalidConstructorAnnotationExceptionWhenNoElementParam() {
+        //when
+        jIocContext.getElement(NotElementParam.class);
+    }
+
+    @Test(expected = AnnotationNotFoundException.class)
+    public void shouldThrowAnnotationNotFoundException() {
+        //when
+        jIocContext.getElement(NotAnnotatedElement.class);
+    }
+
 }

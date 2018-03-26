@@ -1,4 +1,4 @@
-package com.karolk.jioc.elements;
+package data;
 
 import com.karolk.jioc.annotations.JiocElement;
 import com.karolk.jioc.annotations.JiocInject;

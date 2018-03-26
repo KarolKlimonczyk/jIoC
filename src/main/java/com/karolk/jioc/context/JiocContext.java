@@ -4,7 +4,6 @@ import com.karolk.jioc.annotations.JiocElement;
 import com.karolk.jioc.annotations.JiocInject;
 import com.karolk.jioc.exceptions.AnnotationNotFoundException;
 import com.karolk.jioc.exceptions.NewInstanceConstructException;
-import com.karolk.jioc.exceptions.SuitableConstructorNotFound;
 import com.karolk.jioc.services.CollectionsService;
 import com.karolk.jioc.services.ContextService;
 import com.karolk.jioc.services.ValidationService;
@@ -59,11 +58,6 @@ public class JiocContext {
         }
 
         Constructor constructor = this.contextService.getSuitableConstructor(classType);
-
-        if (constructor == null) {
-            throw new SuitableConstructorNotFound("No annotated by @JiocInject or default constructor found in " + classType);
-        }
-
         Class<?>[] constructorParamsTypes = constructor.getParameterTypes();
         Object[] constructorParams = Arrays.stream(constructorParamsTypes).map(paramTypes -> this.resolve(paramTypes, false)).toArray();
 

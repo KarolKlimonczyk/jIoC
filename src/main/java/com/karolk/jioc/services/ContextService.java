@@ -6,7 +6,7 @@ import com.karolk.jioc.enums.ElementParam;
 import com.karolk.jioc.enums.ElementScope;
 import com.karolk.jioc.enums.InjectionParam;
 import com.karolk.jioc.exceptions.AnnotationParamNotFoundException;
-import com.karolk.jioc.exceptions.InvalidConstructorAnnotation;
+import com.karolk.jioc.exceptions.InvalidConstructorAnnotationException;
 import com.karolk.jioc.exceptions.NewInstanceConstructException;
 
 import java.lang.annotation.Annotation;
@@ -84,7 +84,7 @@ public class ContextService {
             this.validationService.validateIfAllConstructorFieldsAreInjectable(annotatedConstructors.get(0), classType);
             return annotatedConstructors.get(0);
         } else if (annotatedConstructors.size() > 1) {
-            throw new InvalidConstructorAnnotation("Too many constructors marked with @JiocInject annotation in a " + classType);
+            throw new InvalidConstructorAnnotationException("Too many constructors marked with @JiocInject annotation in a " + classType);
         }
 
         return Arrays.stream(constructors).filter(c -> c.getParameterCount() == 0)
