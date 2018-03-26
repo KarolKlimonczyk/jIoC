@@ -10,4 +10,5 @@ import java.lang.annotation.Target;
 public @interface JiocInject {
 
     int collectionSize() default 1;
+    String conditionalScope() default "";
 }

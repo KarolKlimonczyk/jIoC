@@ -2,20 +2,20 @@ package com.karolk.jioc.context;
 
 import com.karolk.jioc.annotations.JiocElement;
 import com.karolk.jioc.annotations.JiocInject;
-import com.karolk.jioc.enums.ElementParam;
-import com.karolk.jioc.enums.ElementScope;
-import com.karolk.jioc.enums.InjectionParam;
-import com.karolk.jioc.exceptions.*;
+import com.karolk.jioc.exceptions.AnnotationNotFoundException;
+import com.karolk.jioc.exceptions.NewInstanceConstructException;
+import com.karolk.jioc.exceptions.SuitableConstructorNotFound;
+import com.karolk.jioc.services.CollectionsService;
+import com.karolk.jioc.services.ContextService;
+import com.karolk.jioc.services.ValidationService;
 import org.reflections.Reflections;
 import org.reflections.scanners.FieldAnnotationsScanner;
 import org.reflections.scanners.SubTypesScanner;
 import org.reflections.scanners.TypeAnnotationsScanner;
 
-import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.ParameterizedType;
 import java.util.*;
 
 public class JiocContext {
@@ -23,53 +23,60 @@ public class JiocContext {
     private final Map<Class, Object> instances;
     private final String context;
 
+    private final ContextService contextService;
+    private final CollectionsService collectionsService;
+
     public JiocContext(String context) {
-        this.instances = new HashMap<>();
         this.context = context;
+        this.instances = new HashMap<>();
+
+        this.contextService = new ContextService(new ValidationService());
+        this.collectionsService = new CollectionsService();
 
         this.init();
     }
 
     public <T> T getElement(Class<T> classType) {
-        return (T) this.resolve(classType);
+        return (T) this.resolve(classType, false);
     }
 
     private void init() {
         Reflections reflections = new Reflections(this.context, new SubTypesScanner(), new FieldAnnotationsScanner(), new TypeAnnotationsScanner());
         Set<Class<?>> elements = reflections.getTypesAnnotatedWith(JiocElement.class);
-        elements.forEach(this::resolve);
+        elements.forEach(e -> this.resolve(e, false));
     }
 
-    private Object resolve(Class<?> classType) {
+    private Object resolve(Class<?> classType, boolean conditionalScope) {
 
-        if (!this.isAnnotated(classType)) {
-            throw new AnnotationNotFoundException("Element is not annotated by any jIoC annotation");
+        if (!this.contextService.isAnnotated(classType)) {
+            throw new AnnotationNotFoundException(classType + " is not annotated by any jIoC annotation");
         }
 
-        if (this.isInstanceAlreadyExist(classType) && this.isSingletonInstance(classType)) {
+        if (this.contextService.isInstanceAlreadyExist(classType, this.instances) && this.contextService.isSingletonInstance(classType) && !conditionalScope) {
             Object instance = this.instances.get(classType);
             this.resolveInjectionForInstanceFields(instance);
             return instance;
         }
 
-        Constructor constructor = this.getSuitableConstructor(classType);
+        Constructor constructor = this.contextService.getSuitableConstructor(classType);
 
         if (constructor == null) {
             throw new SuitableConstructorNotFound("No annotated by @JiocInject or default constructor found in " + classType);
         }
 
         Class<?>[] constructorParamsTypes = constructor.getParameterTypes();
-        Object[] constructorParams = Arrays.stream(constructorParamsTypes).map(this::resolve).toArray();
+        Object[] constructorParams = Arrays.stream(constructorParamsTypes).map(paramTypes -> this.resolve(paramTypes, false)).toArray();
 
         try {
             Object instance = constructor.newInstance(constructorParams);
             this.resolveInjectionForInstanceFields(instance);
-            this.instances.put(classType, instance);
+            if (this.contextService.isSingletonInstance(classType)) {
+                this.instances.put(classType, instance);
+            }
             return instance;
 
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-            e.printStackTrace();
-            throw new NewInstanceConstructException("Cannot create new instance");
+            throw new NewInstanceConstructException("Cannot resolve dependencies and object cannot be created.");
         }
     }
 
@@ -83,7 +90,7 @@ public class JiocContext {
     }
 
     private Field resolveInjection(Object instance, Field field) {
-        Class<?> fieldType = getFieldType(field);
+        Class<?> fieldType = this.contextService.getFieldType(field);
         try {
             Object objectToInject = this.getObjectToInject(field, fieldType);
             field.set(instance, objectToInject);
@@ -93,32 +100,21 @@ public class JiocContext {
         return field;
     }
 
-    private Class<?> getFieldType(Field field) {
-        if (!isCollection(field)) {
-            return field.getType();
-        }
-
-        Class<?> genericType;
-        ParameterizedType genericCollectionType = (ParameterizedType) field.getGenericType();
-        genericType = (Class<?>) genericCollectionType.getActualTypeArguments()[0];
-        return genericType;
-    }
-
     private Object getObjectToInject(Field field, Class<?> genericFieldType) {
 
-        if (isCollection(field)) {
+        if (this.contextService.isCollection(field)) {
             return this.getCollectionToInject(genericFieldType, field);
         }
 
-        if (this.isInstanceAlreadyExist(field.getType()) && this.isSingletonInstance(field.getType())) {
+        if (this.contextService.isManagedByContainer(field.getType(), field, this.instances)) {
             return this.instances.get(field.getType());
         }
 
-        return this.resolve(field.getType());
+        return this.resolve(field.getType(), this.contextService.isConditionalScope(field));
     }
 
     private Object getCollectionToInject(Class<?> genericFieldType, Field field) {
-        int collectionSize = this.getCollectionSize(field);
+        int collectionSize = this.collectionsService.getCollectionSize(field);
         Collection<Object> collection;
 
         if (field.getType().equals(List.class)) {
@@ -128,85 +124,12 @@ public class JiocContext {
         }
 
         for (int i = 0; i < collectionSize; i++) {
-            if (this.isInstanceAlreadyExist(genericFieldType) && this.isSingletonInstance(genericFieldType)) {
+            if (this.contextService.isManagedByContainer(genericFieldType, field, this.instances)) {
                 collection.add(this.instances.get(genericFieldType));
             } else {
-                collection.add(this.resolve(genericFieldType));
+                collection.add(this.resolve(genericFieldType, this.contextService.isConditionalScope(field)));
             }
         }
         return collection;
-    }
-
-    private int getCollectionSize(Field field) {
-        int collectionSize = 0;
-        Annotation annotation = field.getAnnotation(JiocInject.class);
-        try {
-            collectionSize = (int) annotation.annotationType().getMethod(InjectionParam.COLLECTION_SIZE).invoke(annotation);
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-            e.printStackTrace();
-        }
-        return collectionSize;
-    }
-
-    private boolean isCollection(Field field) {
-        return field.getType().equals(List.class) || field.getType().equals(Set.class);
-    }
-
-    private boolean isAnnotated(Class<?> classType) {
-        return classType.isAnnotationPresent(JiocElement.class);
-    }
-
-    private boolean isInstanceAlreadyExist(Class<?> classType) {
-        return this.instances.containsKey(classType);
-    }
-
-    private boolean isSingletonInstance(Class<?> classType) {
-        Annotation annotation = classType.getAnnotation(JiocElement.class);
-        try {
-            String value = (String) annotation.annotationType().getMethod(ElementParam.SCOPE).invoke(annotation);
-            return ElementScope.SINGLETON.equalsIgnoreCase(value);
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-            e.printStackTrace();
-            throw new AnnotationParamNotFoundException("Annotation param: " + ElementParam.SCOPE + " not found.");
-        }
-    }
-
-    private Constructor getSuitableConstructor(Class<?> classType) {
-        Constructor<?>[] constructors = classType.getDeclaredConstructors();
-        Constructor annotatedConstructor = null;
-        Constructor defaultConstructor = null;
-
-        int amountOfConstructorsMarkedByInjectAnnotation = 0;
-
-        for (Constructor constructor : constructors) {
-
-            if (constructor.getParameterCount() == 0) {
-                defaultConstructor = constructor;
-            }
-
-            if (constructor.isAnnotationPresent(JiocInject.class)) {
-                amountOfConstructorsMarkedByInjectAnnotation++;
-                if (amountOfConstructorsMarkedByInjectAnnotation > 1) {
-                    throw new InvalidConstructorAnnotation("Too many constructors marked with @JiocInject annotation in " + classType);
-                }
-
-                this.validateIfAllConstructorFieldsAreInjectable(constructor);
-                annotatedConstructor = constructor;
-            }
-        }
-
-        if (annotatedConstructor == null) {
-            return defaultConstructor;
-        }
-
-        return annotatedConstructor;
-    }
-
-    private void validateIfAllConstructorFieldsAreInjectable(Constructor constructor) {
-        for (Class<?> classType : constructor.getParameterTypes()) {
-            if (!classType.isAnnotationPresent(JiocElement.class)) {
-                throw new InvalidConstructorAnnotation("Some of the constructor's parameters are not annotated by @JiocElement and cannot be injected in " + classType);
-            }
-        }
     }
 }
